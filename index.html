@@ -1,0 +1,328 @@
+<!-- 
+author :- Bairoju Sai Teja
+Project Idea :- P. Vikram sir
+During Internship at IIT Hyderabad 
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Dual-Sided Jigsaw Puzzle</title>
+    <style>
+      :root {
+        --rows: 4;
+        --cols: 4;
+        --size: 512px;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 2rem;
+        font-family: "Segoe UI", sans-serif;
+        background: linear-gradient(to bottom, #eef2f3, #8e9eab);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      h1 {
+        margin-top: 0;
+        color: #333;
+      }
+
+      #setup {
+        margin-bottom: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 2rem;
+        border: 2px dashed #999;
+        border-radius: 8px;
+        background: #ffffffcc;
+      }
+
+      #setup label {
+        font-weight: bold;
+      }
+
+      #setup input[type="file"] {
+        border: 1px solid #ccc;
+        padding: 0.4rem;
+        border-radius: 5px;
+      }
+
+      button {
+        background-color: #3b82f6;
+        color: white;
+        border: none;
+        padding: 0.6rem 1.2rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: background 0.3s;
+      }
+
+      button:hover {
+        background-color: #2563eb;
+      }
+
+      #board-wrapper {
+        position: relative;
+        width: var(--size);
+        height: var(--size);
+        perspective: 1000px;
+        margin-top: 1rem;
+      }
+
+      #front-board,
+      #back-board {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        transform-style: preserve-3d;
+        backface-visibility: hidden;
+        transition: transform 0.6s ease;
+      }
+
+      #front-board {
+        transform: rotateY(0deg);
+      }
+      #back-board {
+        transform: rotateY(180deg);
+      }
+
+      #board-wrapper.flip #front-board {
+        transform: rotateY(-180deg);
+        pointer-events: none;
+      }
+      #board-wrapper.flip #back-board {
+        transform: rotateY(0deg);
+        pointer-events: auto;
+      }
+
+      .piece {
+        position: absolute;
+        width: calc(var(--size) / var(--cols));
+        height: calc(var(--size) / var(--rows));
+        background-size: var(--size) var(--size);
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+        transition: left 0.1s, top 0.1s;
+        z-index: 5;
+      }
+
+      .piece.locked {
+        cursor: default;
+        box-shadow: none;
+        z-index: 0;
+      }
+
+      #status {
+        margin-top: 1rem;
+        font-size: 1.2rem;
+        color: #222;
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🧩 Dual-Sided Jigsaw Puzzle</h1>
+
+    <div id="setup">
+      <label
+        >Choose Front Image: <input type="file" id="front-img" accept="image/*"
+      /></label>
+      <label
+        >Choose Back Image: <input type="file" id="back-img" accept="image/*"
+      /></label>
+      <button id="start-btn">Start Puzzle</button>
+    </div>
+
+    <button id="flip-btn" style="display: none">Flip to Back</button>
+
+    <div id="board-wrapper">
+      <div id="front-board"></div>
+      <div id="back-board"></div>
+    </div>
+
+    <div id="status"></div>
+
+    <script>
+      const setupUI = document.getElementById("setup");
+      const startBtn = document.getElementById("start-btn");
+      const flipBtn = document.getElementById("flip-btn");
+      const fInput = document.getElementById("front-img");
+      const bInput = document.getElementById("back-img");
+
+      const defaultFront =
+        "https://images.unsplash.com/photo-1518717758536-85ae29035b6d?auto=format&fit=crop&w=1024&q=80";
+      const defaultBack =
+        "https://images.unsplash.com/photo-1750672951701-b9dcb289ea29?q=80&w=687&auto=format&fit=crop";
+
+      function loadImage(fileInput, fallback) {
+        return new Promise((res) => {
+          const file = fileInput.files[0];
+          if (!file) return res(fallback);
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      startBtn.onclick = async () => {
+        const frontURL = await loadImage(fInput, defaultFront);
+        const backURL = await loadImage(bInput, defaultBack);
+        setupUI.style.display = "none";
+        flipBtn.style.display = "inline-block";
+        initPuzzle(frontURL, backURL);
+      };
+
+      flipBtn.onclick = () => {
+        const wrap = document.getElementById("board-wrapper");
+        const flipped = wrap.classList.toggle("flip");
+        flipBtn.textContent = flipped ? "Flip to Front" : "Flip to Back";
+      };
+
+      function initPuzzle(frontURL, backURL) {
+        const fBoard = document.getElementById("front-board");
+        const bBoard = document.getElementById("back-board");
+        const status = document.getElementById("status");
+
+        const rows = parseInt(
+          getComputedStyle(document.documentElement).getPropertyValue("--rows")
+        );
+        const cols = parseInt(
+          getComputedStyle(document.documentElement).getPropertyValue("--cols")
+        );
+        const size = parseInt(
+          getComputedStyle(document.documentElement).getPropertyValue("--size")
+        );
+        const pw = size / cols,
+          ph = size / rows;
+        const total = rows * cols;
+        let placed = 0;
+
+        function makePiece(r, c) {
+          const fx = -c * pw,
+            fy = -r * ph;
+          const correctX = c * pw,
+            correctY = r * ph;
+          const randX = Math.random() * (size - pw),
+            randY = Math.random() * (size - ph);
+
+          const frontPiece = document.createElement("div");
+          frontPiece.className = "piece";
+          frontPiece.style.backgroundImage = `url(${frontURL})`;
+          frontPiece.style.backgroundPosition = `${fx}px ${fy}px`;
+          frontPiece.style.left = frontPiece.dataset.cx = correctX + "px";
+          frontPiece.style.top = frontPiece.dataset.cy = correctY + "px";
+
+          const backPiece = document.createElement("div");
+          backPiece.className = "piece";
+          backPiece.style.backgroundImage = `url(${backURL})`;
+          backPiece.style.backgroundPosition = `${fx}px ${fy}px`;
+
+          frontPiece.style.left = backPiece.style.left = randX + "px";
+          frontPiece.style.top = backPiece.style.top = randY + "px";
+          frontPiece.dataset.cx = backPiece.dataset.cx = correctX;
+          frontPiece.dataset.cy = backPiece.dataset.cy = correctY;
+
+          attachDrag(frontPiece, backPiece);
+          attachDrag(backPiece, frontPiece);
+
+          fBoard.appendChild(frontPiece);
+          bBoard.appendChild(backPiece);
+        }
+
+        function attachDrag(el, twin) {
+          let drag = false,
+            offX = 0,
+            offY = 0,
+            wrapRect;
+          const onDown = (e) => {
+            if (el.classList.contains("locked")) return;
+            const flipped = document
+              .getElementById("board-wrapper")
+              .classList.contains("flip");
+            if (
+              (flipped && el.parentElement.id === "front-board") ||
+              (!flipped && el.parentElement.id === "back-board")
+            )
+              return;
+
+            drag = true;
+            wrapRect = document
+              .getElementById("board-wrapper")
+              .getBoundingClientRect();
+            const rect = el.getBoundingClientRect();
+            offX = e.clientX - rect.left;
+            offY = e.clientY - rect.top;
+
+            document
+              .querySelectorAll(".piece:not(.locked)")
+              .forEach((p) => (p.style.zIndex = 5));
+            el.style.zIndex = twin.style.zIndex = 20;
+
+            el.setPointerCapture(e.pointerId);
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+          };
+
+          const onMove = (e) => {
+            if (!drag) return;
+            const nx = Math.max(
+              0,
+              Math.min(e.clientX - wrapRect.left - offX, size - pw)
+            );
+            const ny = Math.max(
+              0,
+              Math.min(e.clientY - wrapRect.top - offY, size - ph)
+            );
+            el.style.left = twin.style.left = nx + "px";
+            el.style.top = twin.style.top = ny + "px";
+          };
+
+          const onUp = () => {
+            drag = false;
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+
+            const dx = parseFloat(el.style.left) - el.dataset.cx;
+            const dy = parseFloat(el.style.top) - el.dataset.cy;
+            if (Math.hypot(dx, dy) < pw * 0.3) {
+              el.style.left = twin.style.left = el.dataset.cx + "px";
+              el.style.top = twin.style.top = el.dataset.cy + "px";
+              el.classList.add("locked");
+              twin.classList.add("locked");
+              el.style.zIndex = twin.style.zIndex = 0;
+              placed++;
+              status.textContent =
+                placed === total
+                  ? "Solved both sides! 🎉"
+                  : `Pieces placed: ${placed}/${total}`;
+            } else {
+              el.style.zIndex = twin.style.zIndex = 5;
+            }
+          };
+
+          el.addEventListener("pointerdown", onDown);
+        }
+
+        status.textContent = "Scrambled! Work on either face.";
+        for (let r = 0; r < rows; r++)
+          for (let c = 0; c < cols; c++) makePiece(r, c);
+      }
+    </script>
+  </body>
+</html>
